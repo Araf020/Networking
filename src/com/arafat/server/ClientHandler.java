@@ -45,6 +45,7 @@ public class ClientHandler implements Runnable
         this.dos = dos;
         this.name = name;
         this.s = s;
+
         this.isloggedin=true;
     }
 
@@ -148,7 +149,11 @@ public class ClientHandler implements Runnable
         }
         else if (commandType.equalsIgnoreCase("R")){
             isFileShared = false;
-            String desc = stringTokenizer.nextToken();
+            String desc = "";
+            if (stringTokenizer.hasMoreTokens()) {
+                desc += stringTokenizer.nextToken()+" ";
+            }
+
 
             //format: requestID#description
             desc = "description:"+ desc;

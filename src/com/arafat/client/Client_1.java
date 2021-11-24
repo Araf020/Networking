@@ -180,7 +180,7 @@ public class Client_1 {
 
                     else {
 //                        System.out.println("reading from dis...");
-                            System.out.println(">>");
+                            System.out.print(">> ");
                             String message = sInput.readUTF();
                             //show the message or get the chunkSize
                             showMessageOrSetChunk(message);
