@@ -4,7 +4,7 @@ import com.arafat.server.Server;
 
 import java.io.*;
 import java.net.Socket;
-import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 public class FileHandler {
 
@@ -29,7 +29,7 @@ public class FileHandler {
         }
     }
 
-    public static void sendFile(String fileName, String filePath,int filesize, int chunkSize, DataOutputStream dos) throws IOException {
+    public static void sendFileFromServer(String fileName, String filePath, int filesize, int chunkSize, DataOutputStream dos) throws IOException {
         File file = new File(filePath);
         FileInputStream fis = new FileInputStream(file);
         BufferedInputStream bis = new BufferedInputStream(fis);
@@ -41,7 +41,7 @@ public class FileHandler {
 
             while ((bytesRead = bis.read(buffer, 0, buffer.length)) > 0) {
                 currentTotal += bytesRead;
-                System.out.println("Sent: " + roundToDoublePrecision((currentTotal *1.0/1000000.0)) + " MB");
+                System.out.println("Sent: " + roundTo((currentTotal *1.0/1000000.0)) + " MB");
                 dos.write(buffer, 0, bytesRead);
                 dos.flush();
 
@@ -63,8 +63,7 @@ public class FileHandler {
 
 
 
-    //overloaded method
-    public static void sendFile(String fileName, String filePath, int chunkSize, DataOutputStream dos, DataInputStream dis) throws IOException {
+    public static void sendFileFromClient(String fileName, String filePath, int chunkSize, DataOutputStream dos, DataInputStream dis, Socket socket) throws IOException {
 
         System.out.println("source: "+ filePath);
 
@@ -74,39 +73,40 @@ public class FileHandler {
         int bytesRead;
         int currentTotal = 0;
         byte[] buffer = new byte[chunkSize];
+        int timeOut = 5000;
+        //set timeOut
+        socket.setSoTimeout(timeOut);
 
         try {
             while ((bytesRead = bis.read(buffer, 0, buffer.length)) > 0) {
                 currentTotal += bytesRead;
 
-                System.out.println("Sent: " + roundToDoublePrecision(currentTotal/1000000.0) + " MB");
+                System.out.println("Sent: " + roundTo(currentTotal/1000000.0) + " MB");
                 dos.write(buffer, 0, bytesRead);
                 dos.flush();
-
-                //make a delay to test timeout
-                /*
-
-                if (currentTotal>2000){
-                    System.out.println("time delay of 33s is applied ");
-                    timeDelay(330000);
-                }
-
-                 */
-
-
                 //get acknowledgement
                 getAcknowledgement(dis);
-//            getAcknowledgement(dis,30000);
+
             }
         }
-        catch (Exception e ){
-            fis.close();
-            bis.close();
-            System.out.println("File transfer failed");
-            System.out.println("Error in transferring file: "+ e.getMessage());
-            handleInterruptedException(filePath);
-            removeFromFileRecords(fileName);
+        catch (SocketTimeoutException e ){
+            System.out.println("File transfer failed cause of socket timeOut");
+            System.out.println("Error in file Transfer: "+ e.getMessage());
+//            socket.close();
+            //send a failure message to server
+            dos.writeUTF("timeout");
+
         }
+        catch (InterruptedIOException e){
+            System.out.println("File transfer failed caused by INTR IO");
+            System.out.println("Error in file Transfer: "+ e.getMessage());
+//            socket.close();
+            //send a failure message to server
+//            dos.writeUTF("");
+
+        }
+        //wait for more time
+        socket.setSoTimeout(100000);
 
         System.out.println("File " + fileName + " sent successfully");
         fis.close();
@@ -168,7 +168,7 @@ public class FileHandler {
         byte[] buffer = new byte[chunkSize];
         while ((bytesRead = dis.read(buffer, 0, buffer.length)) > 0) {
             currentTotal += bytesRead;
-            System.out.println("--------"+roundToDoublePrecision((currentTotal * 1.0 / fileSize)*100.0) + "% done");
+            System.out.println("--------"+ roundTo((currentTotal * 1.0 / fileSize)*100.0) + "% done");
 //            System.out.println("Receiving " + currentTotal + " bytes");
             bos.write(buffer, 0, bytesRead);
             bos.flush();
@@ -186,7 +186,7 @@ public class FileHandler {
 //        System.out.println("exiting from downloadMethod..");
     }
 
-    public static void receiveFile(String fileName, String filePath, int fileSize,int chunkSize, DataInputStream dis, DataOutputStream dos) throws IOException {
+    public static void receiveFileInServer(String fileName, String filePath, int fileSize, int chunkSize, DataInputStream dis, DataOutputStream dos) throws IOException {
 
         System.out.println("destination: "+ filePath);
         FileOutputStream fos = new FileOutputStream(filePath);
@@ -201,14 +201,20 @@ public class FileHandler {
             while ((bytesRead = dis.read(buffer, 0, buffer.length)) > 0) {
 
                 currentTotal += bytesRead;
-                System.out.println(roundToDoublePrecision((currentTotal * 1.0 /fileSize)*100.0) + " % Received");
+                System.out.println(roundTo((currentTotal * 1.0 /fileSize)*100.0) + " % Received");
                 bos.write(buffer, 0, bytesRead);
                 bos.flush();
+
+                //make a delay to test timeout
+//                if (currentTotal>5000){
+//                    System.out.println("time delay of 33s is applied ");
+//                    timeDelay(7000);
+//                    getTimeOutMessage(dis, fileName, filePath);
+//                    break;
+//                }
+
                 //send acknowledgement
                 sendAcknowledgement(dos);
-
-//            System.out.println("now currentot: "+ currentTotal);
-
                 if (checkSum(fileSize, currentTotal)) {
                     System.out.println("File " + fileName + " received successfully");
                     break;
@@ -223,12 +229,21 @@ public class FileHandler {
             handleInterruptedException(filePath);
             removeFromFileRecords(fileName);
         }
-
-//        System.out.println("File " + fileName + " received successfully");
         fos.close();
         bos.close();
     }
 
+    private static void getTimeOutMessage(DataInputStream dis,String fileName, String filePath) throws IOException {
+
+        System.out.println("gettinhg time out Message..");
+        String message = dis.readUTF();
+        if (message.equalsIgnoreCase("timeout")) {
+            removeFromFileRecords(fileName);
+            handleInterruptedException(filePath);
+
+        }
+
+    }
 
 
     public static void receiveFile(String fileName, String filePath, int fileSize, int chunkSize, DataInputStream dis, DataOutputStream dos, Socket socket) throws IOException {
@@ -241,8 +256,8 @@ public class FileHandler {
         byte[] buffer = new byte[chunkSize];
         int timeOut = 30000; //30 seconds
 
-        //set timeOut
-        socket.setSoTimeout(timeOut);
+//        //set timeOut
+//        socket.setSoTimeout(timeOut);
 
         try {
 
@@ -251,10 +266,12 @@ public class FileHandler {
 
                 currentTotal += bytesRead;
 //                System.out.println("Receiving " + currentTotal + " bytes");
-                System.out.println(roundToDoublePrecision((currentTotal * 1.0 /fileSize)*100.0) + " % Received");
+                System.out.println(roundTo((currentTotal * 1.0 /fileSize)*100.0) + " % Received");
 
                 bos.write(buffer, 0, bytesRead);
                 bos.flush();
+
+
                 //send acknowledgement
                 sendAcknowledgement(dos);
 
@@ -267,23 +284,23 @@ public class FileHandler {
 
             }
         }
-        catch (SocketException e ){
+        catch (SocketTimeoutException  e ){
 
-            System.out.println("File transfer failed");
+            System.out.println("File transfer failed cause of socket timeOut");
             System.out.println("Error in file Transfer: "+ e.getMessage());
-            socket.close();
+//            socket.close();
             handleInterruptedException(filePath);
             removeFromFileRecords(fileName);
         }
-        catch (IOException e){
-            System.out.println("File transfer failed");
+        catch (InterruptedIOException e){
+            System.out.println("File transfer failed cause of interruption");
             socket.close();
             handleInterruptedException(filePath);
             removeFromFileRecords(fileName);
         }
 
         //now extend the timeOut to 100 seconds
-        socket.setSoTimeout(timeOut+70000);
+//        socket.setSoTimeout(timeOut+70000);
 
 //        System.out.println("File " + fileName + " received successfully");
         fos.close();
@@ -302,20 +319,6 @@ public class FileHandler {
         return fileSize == current;
     }
 
-    public static void handleInterruptedException(String filePath, DataInputStream dis, DataOutputStream dos){
-        try {
-
-
-            dis.close();
-            dos.close();
-            System.out.println("resource closed");
-            deleteFile(filePath);
-        } catch (IOException e) {
-            System.out.println("Error in deleting in interruption: "+e.getMessage());
-            e.printStackTrace();
-        }
-
-    }
 
     private static void handleInterruptedException(String filePath) {
         deleteFile(filePath);
@@ -324,8 +327,9 @@ public class FileHandler {
     private static void timeDelay(int time) throws InterruptedException {
         Thread.sleep(time);
     }
-    private static double roundToDoublePrecision(double number){
-        return  (Math.round(number * 100.0) / 100.0);
+
+    private static double roundTo(double number){
+        return  (Math.round(number * 10000.0) / 10000.0);
     }
 
     private static void removeFromFileRecords(String fileName){

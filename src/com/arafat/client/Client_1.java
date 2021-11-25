@@ -9,7 +9,6 @@ package com.arafat.client;
 
 //Client class
 import com.arafat.filemanager.FileHandler;
-import com.arafat.message.Message;
 
 
 import java.io.*;
@@ -74,25 +73,9 @@ public class Client_1 {
 
     public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
 
-        String serverAddress;
 
         int portNumber = 1234;
-        if(args.length < 1){
-            System.out.println("=============================================================");
-            System.out.println("# 															 ");
-            System.out.println("# Usage: $ java Client [sever ip]							 ");
-            System.out.println("# 															 ");
-            System.out.println("# e.g. $ java Client 192.168.1.1																 ");
-            System.out.println("# 							 								 ");
-            System.out.println("# NO ARGUMENT REQUIRED IF SERVER RUNNING ON LOCALHOST		 ");
-            System.out.println("# 															 ");
-            System.out.println("=============================================================");
-
-            serverAddress = "localhost";
-        }
-        else{
-            serverAddress = args[0];
-        }
+        String serverAddress = "localhost";
         Client_1 client = new Client_1(serverAddress, portNumber);
         client.start();
 
@@ -158,6 +141,8 @@ public class Client_1 {
 
         }
     }
+
+
 
     public int getClientID() {
         return this.clientID;
@@ -336,7 +321,8 @@ public class Client_1 {
 
         System.out.println("file uploading...");
         System.out.println("uploadFailed:"+this.uploadFailed);
-        FileHandler.sendFile(fileName, filePath,chunkS,sOutput,sInput);
+        FileHandler.sendFileFromClient(fileName, filePath,chunkS,sOutput,sInput, this.socket);
+//        FileHandler.sendFile(fileName, filePath,chunkS,sOutput,sInput);
         System.out.println("<><><><>file upload completed<><><><>");
         this.isUpload = false;
 

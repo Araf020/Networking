@@ -101,7 +101,7 @@ public class Client
                         String fileName = scn.nextLine();
                         String filePath = scn.nextLine();
                         int fileSize = FileHandler.getFileSize(filePath);
-                        FileHandler.sendFile(fileName, filePath,12000, chunkSize, dos);
+                        FileHandler.sendFileFromServer(fileName, filePath,12000, chunkSize, dos);
                     } catch (IOException e) {
 
                         e.printStackTrace();
@@ -121,7 +121,7 @@ public class Client
                         String fileLocation = "receive/"+fileName;
                         int filesize  = 1024;
                         int chunksize = 1024;
-                        FileHandler.receiveFile(fileName,fileLocation, filesize,chunkSize,dis,dos);
+                        FileHandler.receiveFileInServer(fileName,fileLocation, filesize,chunkSize,dis,dos);
                     } catch (IOException e) {
 
                         e.printStackTrace();

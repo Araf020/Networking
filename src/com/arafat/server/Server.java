@@ -20,7 +20,7 @@ public class Server
 
     public static HashMap<Integer,Queue<Message>> clientMessageQueue = new HashMap<>();
 
-    public static int MAX_BUFFER_SIZE;
+    public static long MAX_BUFFER_SIZE;
     public static int MIN_CHUNK_SIZE;
     public static int MAX_CHUNK_SIZE;
     public static int CURRENT_BUFFER_SIZE;
@@ -36,13 +36,15 @@ public class Server
         Socket s;
 
         System.out.println("Server hasn't started yet!");
-        System.out.println("Enter the maximum buffer size");
-        Server.MAX_BUFFER_SIZE = sc.nextInt();
-        System.out.println("Enter the minimum chunk size");
-        Server.MIN_CHUNK_SIZE = sc.nextInt();
-        System.out.println("Enter the maximum chunk size");
-        Server.MAX_CHUNK_SIZE = sc.nextInt();
+        System.out.println("Enter the maximum buffer size(in GB)");
+        Server.MAX_BUFFER_SIZE = sc.nextLong()*1000*1000*1000; // convert to bytes
+        System.out.println("Enter the minimum chunk size(in KB)");
+        Server.MIN_CHUNK_SIZE = sc.nextInt()*1000;
+        System.out.println("Enter the maximum chunk size(in KB)");
+        Server.MAX_CHUNK_SIZE = sc.nextInt()*1000;
         Server.CURRENT_BUFFER_SIZE = 0;
+
+
 
         // server is listening on port 1234
         ServerSocket ss = new ServerSocket(1234);

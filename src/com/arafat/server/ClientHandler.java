@@ -60,7 +60,6 @@ public class ClientHandler implements Runnable
         this.dos = dos;
         this.name = name;
         this.s = s;
-
         this.isloggedin=true;
     }
 
@@ -269,7 +268,7 @@ public class ClientHandler implements Runnable
         Server.clientMessageQueue.get(requestId).add(new Message("someone uploaded the file you requested!\nFileId: "+fileid+"\nto download the file type [D fileId]", requestId));
 
         //testing
-        showMessageOfClient(requestId);
+//        showMessageOfClient(requestId);
     }
 
     private void processAndSendChunkSize(int fileSize, int fileId, String fileName) throws IOException {
@@ -293,29 +292,31 @@ public class ClientHandler implements Runnable
     //===========================================================================
     //======================= receive file ======================================
     //===========================================================================
-    private void receiveFile(int filesize, String fileName) throws IOException {
-
-//        String fileName = getFileNameFromRecords(this.clientID);
-        String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
-
-        //delay of 10 seconds
-//        this.s.setSoTimeout(10000);
-
-        FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos,this.s);
-
-        //file receive done so wait longer otherwise it will close the socket
-//        s.setSoTimeout(100000);
-    }
-
     private void receiveFile(int filesize, int fileId) throws IOException {
 
         String fileName = getFileNameByFileId(fileId);
         String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
 
-        FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos);
+        FileHandler.receiveFileInServer(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos);
 
         s.setSoTimeout(100000);
     }
+
+
+//    private void receiveFile(int filesize, String fileName) throws IOException {
+//
+////        String fileName = getFileNameFromRecords(this.clientID);
+//        String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
+//
+//        //delay of 10 seconds
+////        this.s.setSoTimeout(10000);
+//
+//        FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos,this.s);
+//
+//        //file receive done so wait longer otherwise it will close the socket
+////        s.setSoTimeout(100000);
+//    }
+
 
     //===========================================================================
     //======================= send file ======================================
@@ -332,7 +333,7 @@ public class ClientHandler implements Runnable
         this.dos.writeUTF("chunk "+ Server.MAX_CHUNK_SIZE+" total "+file_size);
         this.dos.flush();
         Thread.sleep(2000);
-        FileHandler.sendFile(fileName,filePath,file_size,Server.MAX_CHUNK_SIZE,this.dos);
+        FileHandler.sendFileFromServer(fileName,filePath,file_size,Server.MAX_CHUNK_SIZE,this.dos);
 
     }
 
@@ -428,7 +429,7 @@ public class ClientHandler implements Runnable
         if (Server.clientMessageQueue.get(this.clientID).isEmpty()) {
             System.out.println("----Queue is empty--\n");
         }
-        showMessageOfClient(this.clientID);
+//        showMessageOfClient(this.clientID);
 
         while (!Server.clientMessageQueue.get(this.clientID).isEmpty()){
             try {
