@@ -14,8 +14,10 @@ public class ClientHandler implements Runnable
     private String name;
     private int clientID;
 
-    final DataInputStream dis;
-    final DataOutputStream dos;
+//    final DataInputStream dis;
+    DataInputStream dis;
+    DataOutputStream dos;
+//    final DataOutputStream dos;
     ObjectInputStream objectInputStream;
     ObjectOutputStream objectOutputStream;
     Socket s;
@@ -25,6 +27,19 @@ public class ClientHandler implements Runnable
 
 
     //constructor
+    public ClientHandler(Socket s,int id, DataInputStream dis, DataOutputStream dos) {
+        this.dis = dis;
+        this.dos = dos;
+        this.s = s;
+        this.clientID = id;
+
+
+        this.isloggedin = true;
+        this.isFileShared = false;
+        this.chunkSize = 1024; //default
+
+
+    }
     public ClientHandler(Socket s, DataInputStream dis, DataOutputStream dos) {
         this.dis = dis;
         this.dos = dos;
@@ -64,13 +79,15 @@ public class ClientHandler implements Runnable
             try
             {
                 // receive the string
-                received = dis.readUTF();
 
+                received = dis.readUTF();
                 System.out.println(received);
 
                 if(received.equals("logout")){
+                    System.out.println("Server~$ ClientId: "+this.clientID+" is leaving!");
                     this.isloggedin=false;
                     this.s.close();
+                    Thread.currentThread().interrupt();
                     break;
                 }
 
@@ -78,7 +95,13 @@ public class ClientHandler implements Runnable
                 processMessage(received);
 
             } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
+                System.out.println("Server~$ Error in clientHandler Thread: "+e.getMessage());
+                this.isloggedin=false;
+
+
+//                e.printStackTrace();
+                break;
+
             }
 
         }
@@ -90,7 +113,7 @@ public class ClientHandler implements Runnable
 
         }catch(IOException e){
 
-            System.out.println("error in closing stream: "+ e.getMessage());
+            System.out.println("Server~$ error in closing stream: "+ e.getMessage());
 //            e.printStackTrace();
         }
     }
@@ -101,17 +124,17 @@ public class ClientHandler implements Runnable
 
     private void initializeClient(){
         try {
-            this.clientID = this.dis.readInt();
+//            this.clientID = this.dis.readInt();
             System.out.println("Client ID is: "+this.clientID);
             FileHandler.createDirectory("clientDirectory/"+this.clientID);
             //initialize the message queue
-            Server.clientMessageQueue.put(this.clientID, new LinkedList<>());
+//            Server.clientMessageQueue.put(this.clientID, new LinkedList<>());
 //            objectInputStream = new ObjectInputStream(s.getInputStream());
 //            objectOutputStream = new ObjectOutputStream(s.getOutputStream());
         }
 
-        catch (IOException e) {
-            System.out.println("got error on receiving id: "+ e.getMessage());
+        catch (Exception e) {
+            System.out.println("Server~$ got error on receiving id: "+ e.getMessage());
             e.printStackTrace();
         }
     }
@@ -133,12 +156,12 @@ public class ClientHandler implements Runnable
                 sendClientList();
             }
             else if (lookup.equalsIgnoreCase("PF")) {
-                System.out.println("looking for public files");
+                System.out.println("Server~$ looking for public files");
                 //send the list of public files
                 sendPublicFileList();
             }
             else if (lookup.equalsIgnoreCase("MF")) {
-                System.out.println("looking for owned files");
+                System.out.println("Server~$ looking for owned files");
                 //send the list of owned files
                 sendOwnersFileList();
             }
@@ -149,15 +172,16 @@ public class ClientHandler implements Runnable
         }
         else if (commandType.equalsIgnoreCase("R")){
             isFileShared = false;
-            String desc = "";
-            if (stringTokenizer.hasMoreTokens()) {
+            String desc = stringTokenizer.nextToken()+" ";
+            while (stringTokenizer.hasMoreTokens()) {
                 desc += stringTokenizer.nextToken()+" ";
             }
 
 
+
             //format: requestID#description
             desc = "description:"+ desc;
-            System.out.println("client with id "+this.clientID+" says: "+ desc);
+            System.out.println("Server~$ client with id "+this.clientID+" says: "+ desc);
 
             //send the message to all clients
             broadCastToAll(desc);
@@ -171,37 +195,53 @@ public class ClientHandler implements Runnable
 
         else if (commandType.equalsIgnoreCase("UR")){
 
-            //Format:: [UR fileSize requestID]
-
+            //Format:: [UR fileName fileSize requestID]
+            String fileName = stringTokenizer.nextToken();
             int fileSize = Integer.parseInt(stringTokenizer.nextToken());
             int requestId = Integer.parseInt(stringTokenizer.nextToken());
             int fileId = generateFileID();
 
-            processAndSendChunkSize(fileSize, fileId);
-            Thread.sleep(1000);
-            receiveFile(fileSize);
-
-            notifyClient(requestId,fileId);
+            if (checkBuffer(fileSize)) {
+                processAndSendChunkSize(fileSize, fileId, fileName);
+                Thread.sleep(1000);
+                receiveFile(fileSize, fileId);
+                notifyClient(requestId, fileId);
+            }
+            else {
+                System.out.println("Server~$ buffer is full");
+                this.dos.writeUTF("BUFFER_OVER_FLOW");
+            }
         }
 
         else if (commandType.equalsIgnoreCase("U")){
 
             isFileShared = true;
-            // command format: U fileSize visibility
+            // command format: U fileName fileSize visibility
+            String fileName = stringTokenizer.nextToken();
             int fileSize = Integer.parseInt(stringTokenizer.nextToken());
             String visibility = stringTokenizer.nextToken();
             int fileId = generateFileID();
-            processAndRespond(fileSize, visibility,fileId);
-            Thread.sleep(2000);
-            receiveFile(fileSize);
 
+            if (checkBuffer(fileSize)) {
+
+
+                processAndRespond(fileSize, visibility, fileId, fileName);
+                Thread.sleep(2000);
+                receiveFile(fileSize, fileId);
+                Server.CURRENT_BUFFER_SIZE -= fileSize;
+            }
+
+            else {
+                System.out.println("Server~$ buffer is full");
+                this.dos.writeUTF("BUFFER_OVER_FLOW");
+            }
 
         }
         else if (commandType.equalsIgnoreCase("D")){
             isFileShared = true;
             // command format: D fileID
             int fileID = Integer.parseInt(stringTokenizer.nextToken());
-            System.out.println("client says: "+ fileID);
+            System.out.println("Server~$client asked for file: "+ fileID);
             //send the file
             sendFileToClient(fileID);
 
@@ -213,20 +253,27 @@ public class ClientHandler implements Runnable
 
     }
 
+    private boolean checkBuffer(int fileSize) {
+        Server.CURRENT_BUFFER_SIZE += fileSize;
+        return Server.CURRENT_BUFFER_SIZE <= Server.MAX_BUFFER_SIZE;
+    }
+
 
     private void notifyClient(int requestId,int fileid) {
 
-        Queue<Message> queue  = Server.clientMessageQueue.get(requestId);
-        if (queue == null){
+
+        if (Server.clientMessageQueue.get(requestId) == null){
             System.out.println("invalid requestId");
             return;
         }
-        queue.add(new Message("someone uploaded the file you requested!\nFileId: "+fileid+"\nto download the file type [D fileId]", requestId));
+        Server.clientMessageQueue.get(requestId).add(new Message("someone uploaded the file you requested!\nFileId: "+fileid+"\nto download the file type [D fileId]", requestId));
 
+        //testing
+        showMessageOfClient(requestId);
     }
 
-    private void processAndSendChunkSize(int fileSize, int fileId) throws IOException {
-        savetoFileRecords(fileSize,"public",fileId);
+    private void processAndSendChunkSize(int fileSize, int fileId, String fileName) throws IOException {
+        savetoFileRecords(fileSize,"public",fileId, fileName);
         System.out.println("filesize :"+fileSize+" visibility: "+ "public");
         //send the chunk size
         sendChunkSize();
@@ -246,13 +293,18 @@ public class ClientHandler implements Runnable
     //===========================================================================
     //======================= receive file ======================================
     //===========================================================================
-    private void receiveFile(int filesize) throws IOException {
+    private void receiveFile(int filesize, String fileName) throws IOException {
 
-        String fileName = getFileNameFromRecords(this.clientID);
+//        String fileName = getFileNameFromRecords(this.clientID);
         String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
 
-        FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos);
+        //delay of 10 seconds
+//        this.s.setSoTimeout(10000);
 
+        FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos,this.s);
+
+        //file receive done so wait longer otherwise it will close the socket
+//        s.setSoTimeout(100000);
     }
 
     private void receiveFile(int filesize, int fileId) throws IOException {
@@ -262,6 +314,7 @@ public class ClientHandler implements Runnable
 
         FileHandler.receiveFile(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos);
 
+        s.setSoTimeout(100000);
     }
 
     //===========================================================================
@@ -310,20 +363,20 @@ public class ClientHandler implements Runnable
 
     }
 
-    private void processAndRespond(int fileSize, String visibility) throws IOException {
+    private void processAndRespond(int fileSize, String visibility, String fileName) throws IOException {
 
         //saving to file records
         int fileID = generateFileID();
-        savetoFileRecords(fileSize,visibility,fileID);
+        savetoFileRecords(fileSize,visibility,fileID, fileName);
         System.out.println("filesize :"+fileSize+" visibility: "+ visibility);
         //send the chunk size
         sendChunkSize();
     }
-    private void processAndRespond(int fileSize, String visibility,int fileId) throws IOException {
+    private void processAndRespond(int fileSize, String visibility,int fileId, String fileName) throws IOException {
 
         //saving to file records
 
-        savetoFileRecords(fileSize,visibility,fileId);
+        savetoFileRecords(fileSize,visibility,fileId, fileName);
         System.out.println("filesize :"+fileSize+" visibility: "+ visibility);
         //send the chunk size
         sendChunkSize();
@@ -340,10 +393,11 @@ public class ClientHandler implements Runnable
     }
 
 
-    private void savetoFileRecords( int fileSize, String visibility, int fileID){
+    private void savetoFileRecords( int fileSize, String visibility, int fileID, String fileName){
 
 
-        String fileName = this.clientID + getDate() + "__" + fileID; //i.e 1705020_2326
+//        String fileName = this.clientID + getDate() + "__" + fileID; //i.e 1705020_2326
+        fileName = this.clientID+"_"+fileName+"_"+fileID;
         String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
 
         SharedFile sharedFile =
@@ -369,7 +423,12 @@ public class ClientHandler implements Runnable
     private void sendMsgFromQueue() throws IOException {
 
         int msgID = 1;
-        String msg= "You have no incoming messages!\n";
+        String msg= "\n-------------------------------------------------------\n";
+
+        if (Server.clientMessageQueue.get(this.clientID).isEmpty()) {
+            System.out.println("----Queue is empty--\n");
+        }
+        showMessageOfClient(this.clientID);
 
         while (!Server.clientMessageQueue.get(this.clientID).isEmpty()){
             try {
@@ -418,7 +477,7 @@ public class ClientHandler implements Runnable
 
         for (ClientHandler clientHandler : Server.clientHandlers) {
             try {
-                if (this.clientID != clientHandler.clientID && clientHandler.isloggedin) {
+                if (this.clientID != clientHandler.clientID) {
                     Integer id = clientHandler.clientID;
                     Server.clientMessageQueue.get(id).add(new Message(msg, this.clientID));
                 }
@@ -482,7 +541,7 @@ public class ClientHandler implements Runnable
 
     private String getPublicFileList(){
 
-        String fileList = "\tFileName\t\t\t\t\t\t\t\t\t\townerID\t\tFileID\n";
+        String fileList = "\tFileName\t\t\t\t\t\t\townerID\t\tFileID\n";
         fileList+= "----------------------------------------------------------------------------------\n";
         for(SharedFile file:Server.sharedFiles){
             if(file.getVisibility().equalsIgnoreCase("public")){
@@ -493,15 +552,46 @@ public class ClientHandler implements Runnable
     }
 
     private String getUploadedFileList(){
-        String fileList = "\t\t\tfileName\t\t\t\t\t\t\t\tfileID\tvisibility\n";
+        String fileList = "\tfileName\t\t\tfileID\tvisibility\n";
         fileList+= "----------------------------------------------------------------------------------\n";
 
         for(SharedFile file:Server.sharedFiles){
             if(file.getOwnerId() == this.clientID){
-                fileList += "\t"+file.getFileName()+"\t"+file.getFileID()+"\t\t"+file.getVisibility()+"\n";
+                fileList += "\t"+file.getFileName()+"\t\t"+file.getFileID()+"\t\t"+file.getVisibility()+"\n";
             }
         }
         return fileList;
     }
 
+
+
+    public int getClientID() {
+        return clientID;
+    }
+    boolean isloggedin() {
+        return this.isloggedin;
+    }
+    public void setLoggInStatus(boolean status){
+        this.isloggedin = status;
+    }
+
+    public void setSocket(Socket s){
+        this.s = s;
+
+    }
+
+    public void setDis(DataInputStream dis) {
+        this.dis = dis;
+    }
+
+    public void setDos(DataOutputStream dos) {
+        this.dos = dos;
+    }
+
+    private void showMessageOfClient(int id){
+        Queue<Message> queue = Server.clientMessageQueue.get(id);
+        for(Message message:queue){
+            System.out.println("message FOR ID: "+id+" #\n" +message.getMessage());
+        }
+    }
 }

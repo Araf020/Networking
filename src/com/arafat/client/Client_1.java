@@ -38,6 +38,7 @@ public class Client_1 {
     private boolean loginStatus;
     private  int chunkSize;
     private  int totalfileSize;
+    private boolean uploadFailed;
     private Thread sThread;
     private Thread lThread;
 
@@ -51,6 +52,7 @@ public class Client_1 {
         this.isUpload = false;
         this.loginStatus = false;
         this.chunkSize = 512;
+        this.uploadFailed=false;
 
     }
 
@@ -92,12 +94,13 @@ public class Client_1 {
             serverAddress = args[0];
         }
         Client_1 client = new Client_1(serverAddress, portNumber);
-
-        System.out.println("Enter ID:");
-        Scanner sc = new Scanner(System.in);
-        client.setClientID(sc.nextInt());
-        client.showPrompt();
         client.start();
+
+//        System.out.println("Enter ID:");
+//        Scanner sc = new Scanner(System.in);
+//        client.setClientID(sc.nextInt());
+        client.showPrompt();
+//        client.start();
 
 
 
@@ -116,21 +119,44 @@ public class Client_1 {
         System.out.println("connection accepted " + socket.getInetAddress() + " :"  + socket.getPort());
 
         //for now. this should be reimplemented...
-        this.loginStatus = true;
+
         InputStream inputStream = socket.getInputStream();
         OutputStream outputStream = socket.getOutputStream();
         sInput = new DataInputStream(inputStream);
         sOutput = new DataOutputStream(outputStream);
 
+        //first send the id
+        Scanner scanner= new Scanner(System.in);
+        System.out.println("Enter ID:");
+        int id = scanner.nextInt();
+        sendID(sOutput, id);
+        int response = sInput.readInt();
+        if (response==2){
+            System.out.println("ID already exists in active list");
+            this.socket.close();
+            System.exit(0);
+
+        }
+        else {
 //        objectInputStream = new ObjectInputStream(inputStream);
 //        objectOutputStream = new ObjectOutputStream(outputStream);
+            System.out.println("ID accepted..");
+            System.out.println("Welcome, "+id);
+            //create a download directory
+//            FileHandler.createDirectory("receive/"+getClientID());
+
+            this.loginStatus = true;
+            this.clientID = id;
+
+            //create a download directory
+            FileHandler.createDirectory("receive/"+id);
+
+            //starting both threads
+            new sendToServer().start();
+            new listenFromServer().start();
 
 
-        sThread = new sendToServer();
-        lThread = new listenFromServer();
-
-        sThread.start();
-        lThread.start();
+        }
     }
 
     public int getClientID() {
@@ -188,7 +214,7 @@ public class Client_1 {
                 }
                  catch (Exception e){
 
-                    System.out.println("reading from server: " + e.getMessage());
+                    System.out.println("error reading from server: " + e.getMessage());
                     System.out.println("connection closed");
                     break;
 
@@ -217,9 +243,9 @@ public class Client_1 {
     class sendToServer extends Thread {
 
         public void run(){
-            System.out.println("sending id..");
-            sendID(sOutput, getClientID());
-            FileHandler.createDirectory("receive/"+getClientID());
+//            System.out.println("sending id..");
+//            sendID(sOutput, getClientID());
+//            FileHandler.createDirectory("receive/"+getClientID());
             Scanner sc = new Scanner(System.in);
             while(true){
                 try{
@@ -287,6 +313,13 @@ public class Client_1 {
                 this.totalfileSize = Integer.parseInt(stringTokenizer.nextToken());
                 System.out.println("file size to be downloaded--: "+ totalfileSize);
             }
+
+        }
+        else if(s.equalsIgnoreCase("BUFFER_OVER_FLOW")){
+            this.uploadFailed = true;
+            System.out.println("uploadFailure:"+this.uploadFailed);
+            System.out.println("Server~$ Buffer overflow in server. Can't upload.\n <><>Try again after some time<><>");
+
         }
         else if (firstToken.equalsIgnoreCase("ack")){
             System.out.print("");
@@ -302,6 +335,7 @@ public class Client_1 {
     private void uploadFile(String fileName, String filePath, int chunkS) throws IOException {
 
         System.out.println("file uploading...");
+        System.out.println("uploadFailed:"+this.uploadFailed);
         FileHandler.sendFile(fileName, filePath,chunkS,sOutput,sInput);
         System.out.println("<><><><>file upload completed<><><><>");
         this.isUpload = false;
@@ -340,15 +374,19 @@ public class Client_1 {
             filePath = filePath + "/" + fileName;
             System.out.println("file size: " + fileSize);
 
-            String sendTo = "UR " +fileSize + " "+requestId;
+            String sendTo = "UR "+fileName+" " +fileSize + " "+requestId;
             sOutput.writeUTF(sendTo);
             System.out.println("waiting for server response..");
 
             Thread.sleep(2000);
             System.out.println("thread awaken");
+
 //            System.out.println("now chunk:"+chunkSize);
-            uploadFile(fileName,filePath,chunkSize);
-            this.isUpload = false;
+            if (!this.uploadFailed) {
+                uploadFile(fileName, filePath, chunkSize);
+                this.isUpload = false;
+            }
+
         }
 
         else if (commandType.equalsIgnoreCase("U")){
@@ -364,15 +402,20 @@ public class Client_1 {
             filePath = filePath + "/" + fileName;
             System.out.println("file size: " + fileSize);
 
-            String sendTo = "U " +fileSize + " "+visibility;
+//            String sendTo = "U " +fileSize + " "+visibility;
+            String sendTo = "U " + fileName +" "+fileSize +" "+visibility;
             sOutput.writeUTF(sendTo);
             System.out.println("waiting for server response..");
 
             Thread.sleep(2000);
             System.out.println("thread awaken");
 //            System.out.println("now chunk:"+chunkSize);
-            uploadFile(fileName,filePath,chunkSize);
-            this.isUpload = false;
+
+            if (!uploadFailed) {
+                uploadFile(fileName, filePath, chunkSize);
+                this.isUpload = false;
+            }
+
 
         }
 
@@ -462,6 +505,18 @@ public class Client_1 {
         }
 
 
+    }
+
+    private void getGreetings(){
+
+        String greet = "";
+        try {
+            System.out.println("getting greet...");
+            greet = sInput.readUTF();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        System.out.println(greet);
     }
 
     public int getRandomInteger(){
