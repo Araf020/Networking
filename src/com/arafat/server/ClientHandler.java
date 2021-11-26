@@ -227,7 +227,7 @@ public class ClientHandler implements Runnable
                 processAndRespond(fileSize, visibility, fileId, fileName);
                 Thread.sleep(2000);
                 receiveFile(fileSize, fileId);
-                Server.CURRENT_BUFFER_SIZE -= fileSize;
+
             }
 
             else {
@@ -254,6 +254,7 @@ public class ClientHandler implements Runnable
 
     private boolean checkBuffer(int fileSize) {
         Server.CURRENT_BUFFER_SIZE += fileSize;
+        System.out.println("current_beffer: "+ Server.CURRENT_BUFFER_SIZE+"  Max_Buffer: "+ Server.MAX_BUFFER_SIZE);
         return Server.CURRENT_BUFFER_SIZE <= Server.MAX_BUFFER_SIZE;
     }
 
@@ -298,8 +299,10 @@ public class ClientHandler implements Runnable
         String filePath = "clientDirectory/"+this.clientID+"/"+fileName;
 
         FileHandler.receiveFileInServer(fileName,filePath,filesize,this.chunkSize,this.dis, this.dos);
+        Server.CURRENT_BUFFER_SIZE -= filesize;
+        System.out.println("Now current buffer Size: "+ Server.CURRENT_BUFFER_SIZE);
 
-        s.setSoTimeout(100000);
+//        s.setSoTimeout(100000);
     }
 
 

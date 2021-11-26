@@ -23,7 +23,7 @@ public class Server
     public static long MAX_BUFFER_SIZE;
     public static int MIN_CHUNK_SIZE;
     public static int MAX_CHUNK_SIZE;
-    public static int CURRENT_BUFFER_SIZE;
+    public static long CURRENT_BUFFER_SIZE;
     // counter for clients
 //    static int i = 0;
 

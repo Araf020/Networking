@@ -75,7 +75,7 @@ public class FileHandler {
         byte[] buffer = new byte[chunkSize];
         int timeOut = 5000;
         //set timeOut
-        socket.setSoTimeout(timeOut);
+//        socket.setSoTimeout(timeOut);
 
         try {
             while ((bytesRead = bis.read(buffer, 0, buffer.length)) > 0) {
@@ -106,7 +106,7 @@ public class FileHandler {
 
         }
         //wait for more time
-        socket.setSoTimeout(100000);
+//        socket.setSoTimeout(100000);
 
         System.out.println("File " + fileName + " sent successfully");
         fis.close();
