@@ -1,4 +1,6 @@
-##File Sharing on LAN
+###
+File Sharing on LAN
+===================
 
 This project aims to provide a simple way to share files on a `LAN`.
 
@@ -8,7 +10,9 @@ Then, other client can upload the file to the server, and the server will broadc
 
 Then the client can download the file with the proper fileId.
 
-###Installation
+###
+Installation
+============
     Clone this repository...
     
     Run the Server class first and set the `buffer` and `chunk` size
